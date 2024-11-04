@@ -1,6 +1,7 @@
 use chrono::NaiveDate;
 use clap::{Args, Parser, Subcommand};
-use csv::{Reader, Writer};
+use csv::{Reader, Writer, WriterBuilder};
+use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
 
 #[derive(Parser)]
@@ -56,7 +57,7 @@ impl DepositArgs {
         // ファイルに書き込む
         let mut writer = Writer::from_writer(open_option);
         writer
-            .write_record([
+            .write_record(&[
                 self.date.format("%Y-%m-%d").to_string(),
                 self.usage.to_string(),
                 self.amount.to_string(),
@@ -85,7 +86,7 @@ impl WithdrawArgs {
         // ファイルに書き込む
         let mut writer = Writer::from_writer(open_option);
         writer
-            .write_record([
+            .write_record(&[
                 self.date.format("%Y-%m-%d").to_string(),
                 self.usage.to_string(),
                 // MEMO: depositとの差分はここだけ
@@ -109,15 +110,29 @@ impl ImportArgs {
             .append(true)
             .open(format!("{}.csv", self.dst_account_name))
             .unwrap();
-        let mut writer = Writer::from_writer(open_option);
+        let mut writer = WriterBuilder::new()
+            .has_headers(false)
+            .from_writer(open_option);
         let mut reader = Reader::from_path(&self.src_file_name).unwrap();
-        for result in reader.records() {
+        for result in reader.deserialize() {
             // Readerは先頭行をヘッダーとして読み込むので、2行目以降について実行される
-            let record = result.unwrap();
-            writer.write_record(&record).unwrap();
+            let record: Record = result.unwrap();
+            writer.serialize(record).unwrap();
         }
-        writer.flush().unwrap();
     }
+}
+
+// CSVの各カラムで期待する型を用意
+#[derive(Serialize, Deserialize)]
+struct Record {
+    日付: NaiveDate,
+    用途: String,
+    金額: i32,
+}
+
+#[derive(Args)]
+struct ReportArgs {
+    files: Vec<String>,
 }
 
 fn main() {
